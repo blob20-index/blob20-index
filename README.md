@@ -46,7 +46,7 @@ Blob20-Index provides simple and easy-to-use RESTful API interfaces. You can ret
 You only need to import the database, modify the config.json, and run it directly
 
 The project has been deployed at https://blob20.art
-
+```
 API:
 	GET /api/getAccounts
 		params：
@@ -72,7 +72,7 @@ API:
 			protocol	string
 			ticker		string
 			operation	string
-
+```
 ### Contributing
 We welcome contributions in any form, including but not limited to:
 
