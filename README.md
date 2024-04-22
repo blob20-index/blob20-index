@@ -58,7 +58,7 @@ API:
 
 	GET /api/getTickers
 		params:
-			tx			string
+			tx		string
 			protocol	string
 			ticker 		string
 
@@ -66,9 +66,9 @@ API:
 		params:
 			page 		int	default value: 1
 			pageSize	int	default value: 20
-			tx			string
+			tx		string
 			from		string
-			to 			string
+			to 		string
 			protocol	string
 			ticker		string
 			operation	string
