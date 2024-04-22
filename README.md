@@ -1,4 +1,5 @@
 Blob20-Index
+
 Blob20-Index is an indexer for Blob-20 tokens, which originated from Blobscriptions (Ethscriptions ESIP-8). It is developed using Go and MySQL 8.0. The Blob-20 protocol was created by @wgw_eth, and our indexer fully complies with the standards set by @wgw_eth for the Blob-20 token protocol.
 
 Features
@@ -7,15 +8,16 @@ Developed using Go for excellent performance
 Uses MySQL 8.0 for stable and reliable data storage
 Provides simple and easy-to-use API interfaces for seamless integration with other applications
 Installation
+
 Clone the repository to your local machine:
-
 git clone https://github.com/blob20-index/blob20-index.git
+
 Navigate to the project directory:
-
 cd blob20-index
-Install dependencies:
 
+Install dependencies:
 go mod download
+
 Configure the database:
 Set up the MySQL database connection information in the config.yaml file.
 
