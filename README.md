@@ -43,7 +43,35 @@ https://github.com/blob20-index/blob20-index/releases/tag/blob20_database_snapsh
 Blob20-Index provides simple and easy-to-use RESTful API interfaces. You can retrieve information about Blob-20 tokens by sending HTTP requests.
 
 ### API Documentation
-For detailed API documentation, please refer to the API Documentation.
+You only need to import the database, modify the config.json, and run it directly
+
+The project has been deployed at https://blob20.art
+
+API:
+	GET /api/getAccounts
+		params：
+			page 		int	default value: 1
+			pageSize	int	default value: 100
+			address		string
+			protocol	string
+			ticker 		string
+
+	GET /api/getTickers
+		params:
+			tx			string
+			protocol	string
+			ticker 		string
+
+	GET /api/getRecords
+		params:
+			page 		int	default value: 1
+			pageSize	int	default value: 20
+			tx			string
+			from		string
+			to 			string
+			protocol	string
+			ticker		string
+			operation	string
 
 ### Contributing
 We welcome contributions in any form, including but not limited to:
