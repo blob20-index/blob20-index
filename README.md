@@ -8,31 +8,18 @@ Uses MySQL 8.0 for stable and reliable data storage
 Provides simple and easy-to-use API interfaces for seamless integration with other applications
 Installation
 Clone the repository to your local machine:
-bash
 
-
-Copy code
 git clone https://github.com/blob20-index/blob20-index.git
 Navigate to the project directory:
-bash
 
-
-Copy code
 cd blob20-index
 Install dependencies:
-bash
 
-
-Copy code
 go mod download
 Configure the database:
 Set up the MySQL database connection information in the config.yaml file.
 
 Run the project:
-bash
-
-
-Copy code
 go run main.go
 
 Initial database snapshot download:
