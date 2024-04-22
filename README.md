@@ -10,21 +10,27 @@ Provides simple and easy-to-use API interfaces for seamless integration with oth
 Installation
 
 Clone the repository to your local machine:
+
 git clone https://github.com/blob20-index/blob20-index.git
 
 Navigate to the project directory:
+
 cd blob20-index
 
 Install dependencies:
+
 go mod download
 
 Configure the database:
+
 Set up the MySQL database connection information in the config.yaml file.
 
 Run the project:
+
 go run main.go
 
 Initial database snapshot download:
+
 https://github.com/blob20-index/blob20-index/releases/tag/blob20_database_snapshot
 
 Usage
