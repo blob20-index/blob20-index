@@ -17,21 +17,26 @@ Navigate to the project directory:
 
 cd blob20-index
 
+
 Install dependencies:
 
 go mod download
+
 
 Configure the database:
 
 Set up the MySQL database connection information in the config.yaml file.
 
+
 Run the project:
 
 go run main.go
 
+
 Initial database snapshot download:
 
 https://github.com/blob20-index/blob20-index/releases/tag/blob20_database_snapshot
+
 
 Usage
 Blob20-Index provides simple and easy-to-use RESTful API interfaces. You can retrieve information about Blob-20 tokens by sending HTTP requests.
