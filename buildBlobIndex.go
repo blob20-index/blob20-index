@@ -75,7 +75,7 @@ func main() {
 	go blob20Indexer()
 
 	if config.HttpServer || config.HttpsServer {
-		http.HandleFunc("/", redirectHTTPToHTTPS)
+		http.HandleFunc("/", index)
 		http.HandleFunc("/api/getAccounts", getAccounts)
 		http.HandleFunc("/api/getTickers", getTickers)
 		http.HandleFunc("/api/getRecords", getRecords)
@@ -88,6 +88,12 @@ func main() {
 		go http.ListenAndServeTLS(":"+strconv.Itoa(config.HttpsPort), config.CertFile, config.KeyFile, nil)
 	}
 	select {}
+}
+
+func index(w http.ResponseWriter, r *http.Request) {
+	targetURL := "https://github.com/blob20-index/blob20-index"
+	http.Redirect(w, r, targetURL, http.StatusMovedPermanently)
+	return
 }
 
 func redirectHTTPToHTTPS(w http.ResponseWriter, r *http.Request) {
@@ -267,7 +273,7 @@ func getAccounts(w http.ResponseWriter, r *http.Request) {
 		args = append(args, ticker)
 	}
 
-	query += " ORDER BY `ticker` DESC,`balance` DESC LIMIT ?, ?"
+	query += " ORDER BY `balance` DESC,`ticker` DESC LIMIT ?, ?"
 	args = append(args, offset, pageSize)
 
 	rows, err := db.Query(query, args...)
@@ -362,13 +368,15 @@ func blob20Indexer() {
 			pageKey
 
 		req, _ := http.NewRequest("GET", url, nil)
-		res, _ := http.DefaultClient.Do(req)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		body, err := io.ReadAll(res.Body)
 		res.Body.Close()
-
 		if err != nil {
-			log.Println(err)
+			log.Fatal(err)
 		}
 		resp := new(Resp)
 		json.Unmarshal(body, resp)
@@ -382,20 +390,13 @@ func blob20Indexer() {
 			query := "SELECT EXISTS(SELECT 1 FROM blob_transactions WHERE transaction_hash = ?)"
 			err = db.QueryRow(query, blob.TransactionHash).Scan(&exists)
 			if err != nil {
-				log.Printf("getdata::get transaction does it exist. hash: %v \n", err)
+				log.Printf("getdata::Error get transaction does error. hash: %v \n", err)
 				continue
 			}
 
 			if exists {
 				log.Println("getdata::exists, continue..：" + blob.TransactionHash)
 				continue
-			} else {
-				_, err := db.Exec("INSERT INTO blob_transactions (transaction_hash, block_number, transaction_index, block_timestamp, block_blockhash, event_log_index, ethscription_number, creator, initial_owner, current_owner, previous_owner, content_uri, content_sha, esip6, mimetype, media_type, mime_subtype, gas_price, gas_used, transaction_fee, value, attachment_sha, attachment_content_type, attachment_path, is_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-					blob.TransactionHash, blob.BlockNumber, blob.TransactionIndex, blob.BlockTimestamp, blob.BlockBlockhash, blob.EventLogIndex, blob.EthscriptionNumber, blob.Creator, blob.InitialOwner, blob.CurrentOwner, blob.PreviousOwner, blob.ContentURI, blob.ContentSha, blob.Esip6, blob.Mimetype, blob.MediaType, blob.MimeSubtype, blob.GasPrice, blob.GasUsed, blob.TransactionFee, blob.Value, blob.AttachmentSha, blob.AttachmentContentType, blob.AttachmentPath, false)
-				if err != nil {
-					log.Printf("getdata::Error inserting transactions data: %v \n", err)
-					continue
-				}
 			}
 
 			blockNumber, _ := strconv.Atoi(blob.BlockNumber)
@@ -409,12 +410,12 @@ func blob20Indexer() {
 					attrReq, _ := http.NewRequest("GET", attUrl, nil)
 					attrRes, err := http.DefaultClient.Do(attrReq)
 					if err != nil {
-						log.Println(err)
+						log.Fatal(err)
 					}
 					attrBody, err := io.ReadAll(attrRes.Body)
 					attrRes.Body.Close()
 					if err != nil {
-						log.Println(err)
+						log.Fatal(err)
 					}
 					blob.Blob20 = string(bytes.TrimPrefix(attrBody, []byte("\xef\xbb\xbf")))
 				} else {
@@ -426,12 +427,6 @@ func blob20Indexer() {
 
 				blob.Blob20 = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(blob.Blob20, " ", ""), "\r", ""), "\n", ""), "\t", "")
 
-				updateSql := "UPDATE blob_transactions SET blob20 = ? WHERE transaction_hash = ?"
-				_, err = db.Exec(updateSql, blob.Blob20, blob.TransactionHash)
-				if err != nil {
-					log.Printf("getdata:: update blob20  fail. :%v", err)
-					continue
-				}
 				if err != nil {
 					log.Printf("getdata::parsing json : %s \n", blob.Blob20)
 					log.Println(err.Error())
@@ -439,27 +434,15 @@ func blob20Indexer() {
 				} else {
 					receipt, err := client.TransactionReceipt(context.Background(), common.HexToHash(blob.TransactionHash))
 					if err != nil {
-						log.Println(err)
-						continue
+						log.Fatal(err)
 					}
 					if receipt.Type != 3 {
 						log.Println(receipt.Type)
 						log.Println("getdata:: type is not eip 4844 tx: " + blob.TransactionHash)
 						continue
 					}
-					if !strings.HasPrefix(blob.ContentURI, "data:;rule=esip6,") && !blob.Esip6 {
-						log.Println(blob.ContentURI)
-						log.Println("getdata:: ContentURI is not esip6 tx: " + blob.TransactionHash)
-						continue
-					}
-					blobGasFee := decimal.NewFromUint64(receipt.BlobGasPrice.Uint64() * receipt.BlobGasUsed)
 
-					updateSql := "UPDATE blob_transactions SET blob_gas_price = ?, blob_gas_used = ?, blob_gas_fee = ? WHERE transaction_hash = ?"
-					_, err = db.Exec(updateSql, receipt.BlobGasPrice.String(), decimal.NewFromUint64(receipt.BlobGasUsed).String(), blobGasFee, blob.TransactionHash)
-					if err != nil {
-						log.Printf("getdata:: update blob20 fail. :%v", err)
-						continue
-					}
+					blobGasFee := decimal.NewFromUint64(receipt.BlobGasPrice.Uint64() * receipt.BlobGasUsed)
 
 					if protocol.Protocol == "blob20" {
 						switch operation := protocol.Token.Operation; operation {
@@ -480,6 +463,15 @@ func blob20Indexer() {
 								if err != nil {
 									log.Fatalln(err)
 								}
+
+								_, err = db.Exec("INSERT INTO blob_transactions (transaction_hash, block_number, transaction_index, block_timestamp, block_blockhash, event_log_index, ethscription_number, creator, initial_owner, current_owner, previous_owner, content_uri, content_sha, esip6, mimetype, media_type, mime_subtype, gas_price, gas_used, transaction_fee, value, attachment_sha, attachment_content_type, attachment_path, is_valid, blob20, blob_gas_price, blob_gas_used, blob_gas_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+									blob.TransactionHash, blob.BlockNumber, blob.TransactionIndex, blob.BlockTimestamp, blob.BlockBlockhash, blob.EventLogIndex, blob.EthscriptionNumber, blob.Creator, blob.InitialOwner, blob.CurrentOwner, blob.PreviousOwner, blob.ContentURI, blob.ContentSha, blob.Esip6, blob.Mimetype, blob.MediaType, blob.MimeSubtype, blob.GasPrice, blob.GasUsed, blob.TransactionFee, blob.Value, blob.AttachmentSha, blob.AttachmentContentType, blob.AttachmentPath, false, blob.Blob20, receipt.BlobGasPrice.String(), decimal.NewFromUint64(receipt.BlobGasUsed).String(), blobGasFee)
+								if err != nil {
+									log.Printf("deploy:: Error inserting transactions data: %v \n", err)
+									tx.Rollback()
+									break
+								}
+
 								if protocol.Token.MaxSupply.LessThanOrEqual(decimal.NewFromInt(0)) &&
 									protocol.Token.Supply.GreaterThan(decimal.NewFromInt(0)) {
 									protocol.Token.MaxSupply = protocol.Token.Supply
@@ -545,6 +537,18 @@ func blob20Indexer() {
 								}
 
 								if protocol.Token.Amount.LessThanOrEqual(deploy.MaxLimitPerMint) && blockNumber > deploy.MintStartBlock && deploy.MintAmount.LessThan(deploy.MaxSupply) {
+									tx, err := db.Beginx()
+									if err != nil {
+										log.Fatalln(err)
+									}
+									_, err = db.Exec("INSERT INTO blob_transactions (transaction_hash, block_number, transaction_index, block_timestamp, block_blockhash, event_log_index, ethscription_number, creator, initial_owner, current_owner, previous_owner, content_uri, content_sha, esip6, mimetype, media_type, mime_subtype, gas_price, gas_used, transaction_fee, value, attachment_sha, attachment_content_type, attachment_path, is_valid, blob20, blob_gas_price, blob_gas_used, blob_gas_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+										blob.TransactionHash, blob.BlockNumber, blob.TransactionIndex, blob.BlockTimestamp, blob.BlockBlockhash, blob.EventLogIndex, blob.EthscriptionNumber, blob.Creator, blob.InitialOwner, blob.CurrentOwner, blob.PreviousOwner, blob.ContentURI, blob.ContentSha, blob.Esip6, blob.Mimetype, blob.MediaType, blob.MimeSubtype, blob.GasPrice, blob.GasUsed, blob.TransactionFee, blob.Value, blob.AttachmentSha, blob.AttachmentContentType, blob.AttachmentPath, false, blob.Blob20, receipt.BlobGasPrice.String(), decimal.NewFromUint64(receipt.BlobGasUsed).String(), blobGasFee)
+									if err != nil {
+										log.Printf("mint:: Error inserting transactions data: %v \n", err)
+										tx.Rollback()
+										break
+									}
+
 									var exists bool
 									query = "SELECT EXISTS(SELECT 1 FROM blob20_record WHERE transaction_hash = ?)"
 
@@ -559,20 +563,16 @@ func blob20Indexer() {
 										break
 									}
 
-									tx, err := db.Beginx()
-									if err != nil {
-										log.Fatalln(err)
-									}
 									account := createOrQueryAccount(query, db, tx, blob.InitialOwner, protocol.Protocol, protocol.Token.Ticker)
 
 									mintEndBlock := 0
 									remainingAmount := deploy.MaxSupply.Sub(deploy.MintAmount)
-									if remainingAmount.LessThan(protocol.Token.Amount) {
+									if remainingAmount.LessThanOrEqual(protocol.Token.Amount) {
 										protocol.Token.Amount = remainingAmount
 										mintEndBlock = blockNumber
 									}
 
-									//插入mint记录
+									//insert mint record
 									query = "INSERT INTO blob20_record(transaction_hash, block_blockhash, block_number, block_timestamp, `index`, protocol, ticker, operation, `from`, `to`, amount, from_before_amount, from_after_amount, to_before_amount, to_after_amount, gas_fee, `status`, status_msg, remark) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 									_, err = db.Exec(query, blob.TransactionHash, blob.BlockBlockhash, blob.BlockNumber, blob.BlockTimestamp, blob.TransactionIndex, deploy.Protocol, deploy.Ticker, protocol.Token.Operation, blob.Creator, blob.InitialOwner, protocol.Token.Amount, 0.00, 0.00, account.Balance, protocol.Token.Amount.Add(account.Balance), blob.TransactionFee.Add(blobGasFee).Div(decimal.NewFromInt(1e18)), "success", nil, nil)
 
@@ -670,7 +670,14 @@ func blob20Indexer() {
 
 										tx, err := db.Beginx()
 										if err != nil {
-											log.Printf("transfer:: 3 error: %v \n", err)
+											log.Fatalln(err)
+										}
+										_, err = db.Exec("INSERT INTO blob_transactions (transaction_hash, block_number, transaction_index, block_timestamp, block_blockhash, event_log_index, ethscription_number, creator, initial_owner, current_owner, previous_owner, content_uri, content_sha, esip6, mimetype, media_type, mime_subtype, gas_price, gas_used, transaction_fee, value, attachment_sha, attachment_content_type, attachment_path, is_valid, blob20, blob_gas_price, blob_gas_used, blob_gas_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+											blob.TransactionHash, blob.BlockNumber, blob.TransactionIndex, blob.BlockTimestamp, blob.BlockBlockhash, blob.EventLogIndex, blob.EthscriptionNumber, blob.Creator, blob.InitialOwner, blob.CurrentOwner, blob.PreviousOwner, blob.ContentURI, blob.ContentSha, blob.Esip6, blob.Mimetype, blob.MediaType, blob.MimeSubtype, blob.GasPrice, blob.GasUsed, blob.TransactionFee, blob.Value, blob.AttachmentSha, blob.AttachmentContentType, blob.AttachmentPath, false, blob.Blob20, receipt.BlobGasPrice.String(), decimal.NewFromUint64(receipt.BlobGasUsed).String(), blobGasFee)
+										if err != nil {
+											log.Printf("transfer:: Error inserting transactions data: %v \n", err)
+											tx.Rollback()
+											break
 										}
 
 										account := createOrQueryAccount(query, db, tx, blob.InitialOwner, deploy.Protocol, deploy.Ticker)
@@ -687,7 +694,7 @@ func blob20Indexer() {
 												}
 
 												query = "INSERT INTO blob20_record(transaction_hash, block_blockhash, block_number, block_timestamp, `index`, protocol, ticker, operation, `from`, `to`, amount, from_before_amount, from_after_amount, to_before_amount, to_after_amount, gas_fee, `status`, status_msg, remark) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-												_, err = db.Exec(query, blob.TransactionHash, blob.BlockBlockhash, blob.BlockNumber, blob.BlockTimestamp, i, deploy.Protocol, deploy.Protocol, protocol.Token.Operation, blob.Creator, transfer.To, transfer.Amount, account.Balance, account.Balance.Sub(transfer.Amount), toAccount.Balance, toAccount.Balance.Add(transfer.Amount), blob.TransactionFee.Add(blob.BlobGasFee).Div(decimal.NewFromInt(1e18)), "success", nil, nil)
+												_, err = db.Exec(query, blob.TransactionHash, blob.BlockBlockhash, blob.BlockNumber, blob.BlockTimestamp, i, deploy.Protocol, deploy.Ticker, protocol.Token.Operation, blob.Creator, transfer.To, transfer.Amount, account.Balance, account.Balance.Sub(transfer.Amount), toAccount.Balance, toAccount.Balance.Add(transfer.Amount), blob.TransactionFee.Add(blob.BlobGasFee).Div(decimal.NewFromInt(1e18)), "success", nil, nil)
 												account.Balance = account.Balance.Sub(transfer.Amount)
 												toAccount.Balance = toAccount.Balance.Add(transfer.Amount)
 												if err != nil {
