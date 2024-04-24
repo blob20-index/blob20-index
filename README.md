@@ -26,6 +26,7 @@ Blob20-Index is an indexer for Blob-20 tokens, which originated from Blobscripti
     ```
 
 - Configure the database:
+  
     **Set up the MySQL database connection information in the config.json file.**
 
 - Run the project:
