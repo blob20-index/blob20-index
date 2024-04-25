@@ -22,7 +22,7 @@ Blob20-Index is an indexer for Blob-20 tokens, which originated from Blobscripti
 
 - Install dependencies:
     ```
-    go mod download
+    go mod tidy
     ```
 
 - Configure the database:
