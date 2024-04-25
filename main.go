@@ -137,9 +137,7 @@ func getTickers(w http.ResponseWriter, r *http.Request) {
 	query += " ORDER BY block_number ASC "
 
 	var deploys []Blob20Deploy
-	err = db.Select(&deploys, query, args...)
-
-	if err != nil {
+	if db.Select(&deploys, query, args...) != nil {
 		log.Println(err)
 		http.Error(w, "Database query error", http.StatusInternalServerError)
 		return
@@ -206,29 +204,12 @@ func getRecords(w http.ResponseWriter, r *http.Request) {
 	query += " ORDER BY block_number DESC,`index` DESC LIMIT ?, ?"
 	args = append(args, offset, pageSize)
 
-	rows, err := db.Query(query, args...)
-	if err != nil {
+	var records []Blob20Record
+	for db.Select(&records, query, args...) != nil {
 		log.Println(err)
-		http.Error(w, "Database query error", http.StatusInternalServerError)
+		http.Error(w, "Failed to scan records", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
-
-	var records []Blob20Record
-	for rows.Next() {
-		var rec Blob20Record
-		if err := rows.Scan(&rec.TransactionHash, &rec.BlockBlockhash, &rec.BlockNumber, &rec.BlockTimestamp,
-			&rec.Index, &rec.Protocol, &rec.Ticker, &rec.Operation, &rec.From, &rec.To,
-			&rec.Amount, &rec.FromBeforeAmount, &rec.FromAfterAmount,
-			&rec.ToBeforeAmount, &rec.ToAfterAmount, &rec.GasFee,
-			&rec.Status, &rec.StatusMsg, &rec.Remark); err != nil {
-			log.Println(err)
-			http.Error(w, "Failed to scan row", http.StatusInternalServerError)
-			return
-		}
-		records = append(records, rec)
-	}
-
 	json.NewEncoder(w).Encode(records)
 }
 
@@ -237,7 +218,7 @@ func getAccounts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	db, err := sql.Open("mysql", config.Database)
+	db, err := sqlx.Open("mysql", config.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -276,23 +257,11 @@ func getAccounts(w http.ResponseWriter, r *http.Request) {
 	query += " ORDER BY `balance` DESC,`ticker` DESC LIMIT ?, ?"
 	args = append(args, offset, pageSize)
 
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "Database query error", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
 	var accounts []Blob20Account
-	for rows.Next() {
-		var acc Blob20Account
-		if err := rows.Scan(&acc.Address, &acc.Protocol, &acc.Ticker, &acc.Balance); err != nil {
-			log.Println(err)
-			http.Error(w, "Failed to scan row", http.StatusInternalServerError)
-			return
-		}
-		accounts = append(accounts, acc)
+	if db.Select(&accounts, query, args...) != nil {
+		log.Println(err)
+		http.Error(w, "Failed to scan accounts", http.StatusInternalServerError)
+		return
 	}
 
 	json.NewEncoder(w).Encode(accounts)
@@ -714,6 +683,7 @@ func blob20Indexer() {
 														_, err = db.Exec(query, toAccount.Balance, toAccount.Address, toAccount.Protocol, toAccount.Ticker)
 														if err != nil {
 															log.Printf("transfer:: 6 error: %v \n", err)
+															tx.Rollback()
 															break
 														} else {
 															updateSql := "UPDATE blob_transactions SET protocol = ?, ticker = ?, operation = ?, amount = ?, is_valid = ? WHERE transaction_hash = ?"
@@ -837,32 +807,32 @@ type Token struct {
 }
 
 type Blob20Account struct {
-	Address  string          `json:"address"`
-	Protocol string          `json:"protocol"`
-	Ticker   string          `json:"ticker"`
-	Balance  decimal.Decimal `json:"balance"`
+	Address  string          `json:"address" db:"address"`
+	Protocol string          `json:"protocol" db:"protocol"`
+	Ticker   string          `json:"ticker" db:"ticker"`
+	Balance  decimal.Decimal `json:"balance" db:"balance"`
 }
 
 type Blob20Record struct {
-	TransactionHash  string          `json:"transaction_hash"`
-	BlockBlockhash   string          `json:"block_blockhash"`
-	BlockNumber      int             `json:"block_number"`
-	BlockTimestamp   int             `json:"block_timestamp"`
-	Index            int             `json:"index"`
-	Protocol         string          `json:"protocol"`
-	Ticker           string          `json:"ticker"`
-	Operation        string          `json:"operation"`
-	From             string          `json:"from"`
-	To               string          `json:"to"`
-	Amount           decimal.Decimal `json:"amount"`
-	FromBeforeAmount decimal.Decimal `json:"from_before_amount"`
-	FromAfterAmount  decimal.Decimal `json:"from_after_amount"`
-	ToBeforeAmount   decimal.Decimal `json:"to_before_amount"`
-	ToAfterAmount    decimal.Decimal `json:"to_after_amount"`
-	GasFee           decimal.Decimal `json:"gas_fee,omitempty"`
-	Status           string          `json:"status"`
-	StatusMsg        *string         `json:"status_msg,omitempty"`
-	Remark           *string         `json:"remark,omitempty"`
+	TransactionHash  string          `json:"transaction_hash" db:"transaction_hash"`
+	BlockBlockhash   string          `json:"block_blockhash" db:"block_blockhash"`
+	BlockNumber      int             `json:"block_number" db:"block_number"`
+	BlockTimestamp   int             `json:"block_timestamp" db:"block_timestamp"`
+	Index            int             `json:"index" db:"index"`
+	Protocol         string          `json:"protocol" db:"protocol"`
+	Ticker           string          `json:"ticker" db:"ticker"`
+	Operation        string          `json:"operation" db:"operation"`
+	From             string          `json:"from" db:"from"`
+	To               string          `json:"to" db:"to"`
+	Amount           decimal.Decimal `json:"amount" db:"amount"`
+	FromBeforeAmount decimal.Decimal `json:"from_before_amount" db:"from_before_amount"`
+	FromAfterAmount  decimal.Decimal `json:"from_after_amount" db:"from_after_amount"`
+	ToBeforeAmount   decimal.Decimal `json:"to_before_amount" db:"to_before_amount"`
+	ToAfterAmount    decimal.Decimal `json:"to_after_amount" db:"to_after_amount"`
+	GasFee           decimal.Decimal `json:"gas_fee,omitempty" db:"gas_fee"`
+	Status           string          `json:"status" db:"status"`
+	StatusMsg        *string         `json:"status_msg,omitempty" db:"status_msg"`
+	Remark           *string         `json:"remark,omitempty" db:"remark"`
 }
 
 type Blob20Deploy struct {
