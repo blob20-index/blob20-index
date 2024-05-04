@@ -57,6 +57,7 @@ Blob20-Index provides simple and easy-to-use RESTful API interfaces. You can ret
 ### API Documentation
 
 The project has been deployed at https://blob20.art
+
 For local use, please visit http://localhost or http://0.0.0.0
 ```
 API:
