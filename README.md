@@ -29,10 +29,18 @@ Blob20-Index is an indexer for Blob-20 tokens, which originated from Blobscripti
 
     **SQLite is used by default, no need to modify the configuration.**  
     **If you need to use MySQL, set the MySQL database connection information in the config.json file.**
-   	```
-    	"sql_type": "mysql",
-  	"database": "root:12345678@tcp(localhost:3306)/blob20"
-    	```
+	```
+	{
+	  "http": true,
+	  "http_port": 80,
+	  "https": false,
+	  "https_port": 443,
+	  "cert_file": "./blob20.art.crt",
+	  "key_file": "./blob20.art.key",
+	  "sql_type": "mysql",
+	  "database": "root:12345678@tcp(localhost:3306)/blob20"
+	}
+	```
 
 - Run the project:
 
