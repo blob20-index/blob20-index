@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/shopspring/decimal"
 	"io"
 	"io/ioutil"
@@ -22,8 +23,8 @@ import (
 )
 
 const (
-	api_url        = "https://api.ethscriptions.com/v2"
 	text_end_block = 19577001
+	api_url        = "https://api.ethscriptions.com/v2"
 	eth_rpc        = "https://rpc.ankr.com/eth"
 )
 
@@ -34,10 +35,12 @@ type Config struct {
 	HttpsPort   int    `json:"https_port"`
 	CertFile    string `json:"cert_file"`
 	KeyFile     string `json:"key_file"`
+	SqlType     string `json:"sql_type"`
 	Database    string `json:"database"`
 }
 
 var config Config
+var sql_struct = "CREATE TABLE IF NOT EXISTS `blob20_account` (`address` TEXT NOT NULL,`protocol` TEXT NOT NULL,`ticker` TEXT NOT NULL,`balance` REAL NOT NULL DEFAULT 0,PRIMARY KEY (`address`, `protocol`, `ticker`)\n);\n\nCREATE TABLE IF NOT EXISTS `blob20_deploy` (`transaction_hash` TEXT NOT NULL,`block_blockhash` TEXT NOT NULL,`block_number` INTEGER NOT NULL,`block_timestamp` INTEGER NOT NULL,`deployer` TEXT NOT NULL,`protocol` TEXT NOT NULL,`ticker` TEXT NOT NULL,`max_supply` REAL,`max_limit_per_mint` REAL,`decimals` INTEGER,`mint_amount` REAL,`mint_quantity` INTEGER,`mint_start_block` INTEGER,`mint_end_block` INTEGER,PRIMARY KEY (`protocol`, `ticker`)\n);\n\nCREATE TABLE IF NOT EXISTS `blob20_record` (`transaction_hash` TEXT NOT NULL,`block_blockhash` TEXT NOT NULL,`block_number` INTEGER NOT NULL,`block_timestamp` INTEGER NOT NULL,`index` INTEGER NOT NULL,`protocol` TEXT NOT NULL,`ticker` TEXT NOT NULL,`operation` TEXT NOT NULL,`from` TEXT NOT NULL,`to` TEXT NOT NULL,`amount` REAL NOT NULL,`from_before_amount` REAL NOT NULL,`from_after_amount` REAL NOT NULL,`to_before_amount` REAL NOT NULL,`to_after_amount` REAL NOT NULL,`gas_fee` REAL,`status` TEXT NOT NULL,`status_msg` TEXT,`remark` TEXT,PRIMARY KEY (`transaction_hash`, `from`, `to`, `index`)\n);\n\nCREATE TABLE IF NOT EXISTS `blob_transactions` (`transaction_hash` TEXT NOT NULL,`block_number` INTEGER,`transaction_index` INTEGER,`block_timestamp` TEXT,`block_blockhash` TEXT,`event_log_index` INTEGER,`ethscription_number` TEXT,`creator` TEXT,`initial_owner` TEXT,`current_owner` TEXT,`previous_owner` TEXT,`content_uri` TEXT,`content_sha` TEXT,`esip6` INTEGER,`mimetype` TEXT,`media_type` TEXT,`mime_subtype` TEXT,`gas_price` TEXT,`gas_used` INTEGER,`transaction_fee` TEXT,`value` TEXT,`attachment_sha` TEXT,`attachment_content_type` TEXT,`attachment_path` TEXT,`blob20` TEXT,`blob_gas_price` TEXT,`blob_gas_used` INTEGER,`blob_gas_fee` TEXT,`protocol` TEXT,`ticker` TEXT,`operation` TEXT,`amount` REAL,`is_valid` INTEGER,PRIMARY KEY (`transaction_hash`));"
 
 func init() {
 	dir, err := os.Getwd()
@@ -52,6 +55,18 @@ func init() {
 	if err := json.Unmarshal(data, &config); err != nil {
 		log.Fatalf("Error parsing config file: %s", err)
 	}
+
+	db, err := sqlx.Connect(config.SqlType, config.Database)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(sql_struct)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 func main() {
@@ -63,7 +78,7 @@ func main() {
 		log.Fatalf("Error getting current directory: %s", err)
 	}
 
-	logPath := dir + "/blob20indexer.log"
+	logPath := dir + "/indexer.log"
 	logFile, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
@@ -113,7 +128,7 @@ func getTickers(w http.ResponseWriter, r *http.Request) {
 	protocol := r.URL.Query().Get("protocol")
 	ticker := r.URL.Query().Get("ticker")
 
-	db, err := sqlx.Open("mysql", config.Database)
+	db, err := sqlx.Connect(config.SqlType, config.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -150,7 +165,7 @@ func getRecords(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	db, err := sqlx.Open("mysql", config.Database)
+	db, err := sqlx.Connect(config.SqlType, config.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -218,7 +233,7 @@ func getAccounts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	db, err := sqlx.Open("mysql", config.Database)
+	db, err := sqlx.Connect(config.SqlType, config.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -298,7 +313,7 @@ func IsValidEthereumAddress(address string) bool {
 }
 
 func blob20Indexer() {
-	db, err := sqlx.Connect("mysql", config.Database)
+	db, err := sqlx.Connect(config.SqlType, config.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -693,7 +708,7 @@ func blob20Indexer() {
 																tx.Rollback()
 																break
 															} else {
-																log.Printf("trasfer::from: %s, to: %s, amount: %s :: success", account.Address, toAccount.Address, transfer.Amount)
+																log.Printf("trasfer:: ticker: %s, from: %s, to: %s, amount: %s :: success", deploy.Ticker, account.Address, toAccount.Address, transfer.Amount)
 																tx.Commit()
 															}
 														}
@@ -723,7 +738,7 @@ func blob20Indexer() {
 							log.Printf("operation:: Unrecognized operation type: %s, hash: %s \n", operation, blob.TransactionHash)
 						}
 					} else {
-						log.Println("protocol:: Is Not blob20 ：" + blob.TransactionHash)
+						log.Println("protocol:: is not blob20 ：" + blob.TransactionHash)
 					}
 				}
 			}
