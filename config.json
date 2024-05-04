@@ -5,5 +5,6 @@
   "https_port": 443,
   "cert_file": "./blob20.art.crt",
   "key_file": "./blob20.art.key",
-  "database": "root:12345678@tcp(localhost:3306)/blob27"
+  "sql_type": "sqlite3",
+  "database": "./index.db"
 }
