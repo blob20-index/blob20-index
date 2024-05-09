@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	_ "github.com/glebarez/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/shopspring/decimal"
 	"io"
 	"io/ioutil"
@@ -40,7 +40,7 @@ type Config struct {
 }
 
 var config Config
-var sql_struct = "CREATE TABLE IF NOT EXISTS `blob20_account` (`address` TEXT NOT NULL,`protocol` TEXT NOT NULL,`ticker` TEXT NOT NULL,`balance` REAL NOT NULL DEFAULT 0,PRIMARY KEY (`address`, `protocol`, `ticker`)\n);\n\nCREATE TABLE IF NOT EXISTS `blob20_deploy` (`transaction_hash` TEXT NOT NULL,`block_blockhash` TEXT NOT NULL,`block_number` INTEGER NOT NULL,`block_timestamp` INTEGER NOT NULL,`deployer` TEXT NOT NULL,`protocol` TEXT NOT NULL,`ticker` TEXT NOT NULL,`max_supply` REAL,`max_limit_per_mint` REAL,`decimals` INTEGER,`mint_amount` REAL,`mint_quantity` INTEGER,`mint_start_block` INTEGER,`mint_end_block` INTEGER,PRIMARY KEY (`protocol`, `ticker`)\n);\n\nCREATE TABLE IF NOT EXISTS `blob20_record` (`transaction_hash` TEXT NOT NULL,`block_blockhash` TEXT NOT NULL,`block_number` INTEGER NOT NULL,`block_timestamp` INTEGER NOT NULL,`index` INTEGER NOT NULL,`protocol` TEXT NOT NULL,`ticker` TEXT NOT NULL,`operation` TEXT NOT NULL,`from` TEXT NOT NULL,`to` TEXT NOT NULL,`amount` REAL NOT NULL,`from_before_amount` REAL NOT NULL,`from_after_amount` REAL NOT NULL,`to_before_amount` REAL NOT NULL,`to_after_amount` REAL NOT NULL,`gas_fee` REAL,`status` TEXT NOT NULL,`status_msg` TEXT,`remark` TEXT,PRIMARY KEY (`transaction_hash`, `from`, `to`, `index`)\n);\n\nCREATE TABLE IF NOT EXISTS `blob_transactions` (`transaction_hash` TEXT NOT NULL,`block_number` INTEGER,`transaction_index` INTEGER,`block_timestamp` TEXT,`block_blockhash` TEXT,`event_log_index` INTEGER,`ethscription_number` TEXT,`creator` TEXT,`initial_owner` TEXT,`current_owner` TEXT,`previous_owner` TEXT,`content_uri` TEXT,`content_sha` TEXT,`esip6` INTEGER,`mimetype` TEXT,`media_type` TEXT,`mime_subtype` TEXT,`gas_price` TEXT,`gas_used` INTEGER,`transaction_fee` TEXT,`value` TEXT,`attachment_sha` TEXT,`attachment_content_type` TEXT,`attachment_path` TEXT,`blob20` TEXT,`blob_gas_price` TEXT,`blob_gas_used` INTEGER,`blob_gas_fee` TEXT,`protocol` TEXT,`ticker` TEXT,`operation` TEXT,`amount` REAL,`is_valid` INTEGER,PRIMARY KEY (`transaction_hash`));"
+var sql_struct = "CREATE TABLE IF NOT EXISTS `blob20_account` (`address` TEXT COLLATE NOCASE NOT NULL,`protocol` TEXT COLLATE NOCASE NOT NULL,`ticker` TEXT COLLATE NOCASE NOT NULL,`balance` REAL NOT NULL DEFAULT 0,PRIMARY KEY (`address`, `protocol`, `ticker`));CREATE TABLE IF NOT EXISTS `blob20_deploy` (`transaction_hash` TEXT COLLATE NOCASE NOT NULL,`block_blockhash` TEXT COLLATE NOCASE NOT NULL,`block_number` INTEGER NOT NULL,`block_timestamp` INTEGER NOT NULL,`deployer` TEXT COLLATE NOCASE NOT NULL,`protocol` TEXT COLLATE NOCASE NOT NULL,`ticker` TEXT COLLATE NOCASE NOT NULL,`max_supply` REAL,`max_limit_per_mint` REAL,`decimals` INTEGER,`mint_amount` REAL,`mint_quantity` INTEGER,`mint_start_block` INTEGER,`mint_end_block` INTEGER,PRIMARY KEY (`protocol`, `ticker`));CREATE TABLE IF NOT EXISTS `blob20_record` (`transaction_hash` TEXT COLLATE NOCASE NOT NULL,`block_blockhash` TEXT COLLATE NOCASE NOT NULL,`block_number` INTEGER NOT NULL,`block_timestamp` INTEGER NOT NULL,`index` INTEGER NOT NULL,`protocol` TEXT COLLATE NOCASE NOT NULL,`ticker` TEXT COLLATE NOCASE NOT NULL,`operation` TEXT COLLATE NOCASE NOT NULL,`from` TEXT COLLATE NOCASE NOT NULL,`to` TEXT COLLATE NOCASE NOT NULL,`amount` REAL NOT NULL,`from_before_amount` REAL NOT NULL,`from_after_amount` REAL NOT NULL,`to_before_amount` REAL NOT NULL,`to_after_amount` REAL NOT NULL,`gas_fee` REAL,`status` TEXT COLLATE NOCASE NOT NULL,`status_msg` TEXT COLLATE NOCASE,`remark` TEXT COLLATE NOCASE,PRIMARY KEY (`transaction_hash`, `from`, `to`, `index`));CREATE TABLE IF NOT EXISTS `blob_transactions` (`transaction_hash` TEXT COLLATE NOCASE NOT NULL,`block_number` INTEGER,`transaction_index` INTEGER,`block_timestamp` TEXT COLLATE NOCASE,`block_blockhash` TEXT COLLATE NOCASE,`event_log_index` INTEGER,`ethscription_number` TEXT COLLATE NOCASE,`creator` TEXT COLLATE NOCASE,`initial_owner` TEXT COLLATE NOCASE,`current_owner` TEXT COLLATE NOCASE,`previous_owner` TEXT COLLATE NOCASE,`content_uri` TEXT COLLATE NOCASE,`content_sha` TEXT COLLATE NOCASE,`esip6` INTEGER,`mimetype` TEXT COLLATE NOCASE,`media_type` TEXT COLLATE NOCASE,`mime_subtype` TEXT COLLATE NOCASE,`gas_price` TEXT COLLATE NOCASE,`gas_used` INTEGER,`transaction_fee` TEXT COLLATE NOCASE,`value` TEXT COLLATE NOCASE,`attachment_sha` TEXT COLLATE NOCASE,`attachment_content_type` TEXT COLLATE NOCASE,`attachment_path` TEXT COLLATE NOCASE,`blob20` TEXT COLLATE NOCASE,`blob_gas_price` TEXT COLLATE NOCASE,`blob_gas_used` INTEGER,`blob_gas_fee` TEXT COLLATE NOCASE,`protocol` TEXT COLLATE NOCASE,`ticker` TEXT COLLATE NOCASE,`operation` TEXT COLLATE NOCASE,`amount` REAL,`is_valid` INTEGER,PRIMARY KEY (`transaction_hash`));"
 
 func init() {
 	dir, err := os.Getwd()
@@ -56,15 +56,17 @@ func init() {
 		log.Fatalf("Error parsing config file: %s", err)
 	}
 
-	db, err := sqlx.Connect(config.SqlType, config.Database)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+	if config.SqlType == "sqlite" {
+		db, err := sqlx.Connect(config.SqlType, config.Database)
+		if err != nil {
+			log.Fatalf("Error parsing sql file: %s", err)
+		}
+		defer db.Close()
 
-	_, err = db.Exec(sql_struct)
-	if err != nil {
-		log.Fatal(err)
+		_, err = db.Exec(sql_struct)
+		if err != nil {
+			log.Fatalf("Error exec sql: %s", err)
+		}
 	}
 
 }
@@ -354,12 +356,14 @@ func blob20Indexer() {
 		req, _ := http.NewRequest("GET", url, nil)
 		res, err := http.DefaultClient.Do(req)
 		if err != nil {
+			log.Println("getdata::err 1: " + err.Error())
 			log.Fatal(err)
 		}
 
 		body, err := io.ReadAll(res.Body)
 		res.Body.Close()
 		if err != nil {
+			log.Println("getdata::err 2: " + err.Error())
 			log.Fatal(err)
 		}
 		resp := new(Resp)
@@ -394,17 +398,20 @@ func blob20Indexer() {
 					attrReq, _ := http.NewRequest("GET", attUrl, nil)
 					attrRes, err := http.DefaultClient.Do(attrReq)
 					if err != nil {
+						log.Println("getdata::err 3: " + err.Error())
 						log.Fatal(err)
 					}
 					attrBody, err := io.ReadAll(attrRes.Body)
 					attrRes.Body.Close()
 					if err != nil {
+						log.Println("getdata::err 4: " + err.Error())
 						log.Fatal(err)
 					}
 					blob.Blob20 = string(bytes.TrimPrefix(attrBody, []byte("\xef\xbb\xbf")))
 				} else {
 					blob.Blob20 = blob20
 				}
+				blob.Blob20 = strings.ToLower(blob.Blob20)
 
 				protocol := new(Protocol)
 				err = json.Unmarshal([]byte(blob.Blob20), &protocol)
@@ -418,6 +425,7 @@ func blob20Indexer() {
 				} else {
 					receipt, err := client.TransactionReceipt(context.Background(), common.HexToHash(blob.TransactionHash))
 					if err != nil {
+						log.Println("getdata::err 5: " + err.Error())
 						log.Fatal(err)
 					}
 					if receipt.Type != 3 {
@@ -429,7 +437,8 @@ func blob20Indexer() {
 					blobGasFee := decimal.NewFromUint64(receipt.BlobGasPrice.Uint64() * receipt.BlobGasUsed)
 
 					if protocol.Protocol == "blob20" {
-						switch operation := protocol.Token.Operation; operation {
+						protocol.Token.Ticker = strings.ToUpper(protocol.Token.Ticker)
+						switch operation := protocol.Token.Operation; strings.ToLower(operation) {
 						case "deploy":
 							var exists bool
 							query := "SELECT EXISTS(SELECT 1 FROM blob20_deploy WHERE protocol = ? AND ticker = ?)"
@@ -494,7 +503,7 @@ func blob20Indexer() {
 							}
 
 							if !exists {
-								log.Printf("mint:: ticker does not exist, hash: %s, protocol: %s, ticker: %s \n", blob.TransactionHash, protocol.Protocol, protocol.Token.Ticker)
+								log.Printf("mint:: ticker does not exist, protocol: %s, ticker: %s, hash: %s \n", protocol.Protocol, protocol.Token.Ticker, blob.TransactionHash)
 								break
 							} else {
 								query := `SELECT * FROM blob20_deploy WHERE protocol = ? AND ticker = ? LIMIT 1;`
@@ -511,7 +520,7 @@ func blob20Indexer() {
 								}
 
 								if deploy.MintAmount.GreaterThanOrEqual(deploy.MaxSupply) {
-									log.Printf("mint:: ticker minted amount: %s, supply: %s, mint is completed.. \n", deploy.MintAmount, deploy.MaxSupply)
+									log.Printf("mint:: ticker is minted. ticker: %s, amount: %s, supply: %s, mint is completed.. \n", deploy.Ticker, deploy.MintAmount, deploy.MaxSupply)
 									break
 								}
 
@@ -547,7 +556,7 @@ func blob20Indexer() {
 										break
 									}
 
-									account := createOrQueryAccount(query, db, tx, blob.InitialOwner, protocol.Protocol, protocol.Token.Ticker)
+									account := createOrQueryAccount(query, db, tx, blob.InitialOwner, deploy.Protocol, deploy.Ticker)
 
 									mintEndBlock := 0
 									remainingAmount := deploy.MaxSupply.Sub(deploy.MintAmount)
@@ -584,7 +593,7 @@ func blob20Indexer() {
 										}
 
 										updateSql := "UPDATE blob_transactions SET protocol = ?, ticker = ?, operation = ?, amount = ?, is_valid = ? WHERE transaction_hash = ?"
-										_, err = db.Exec(updateSql, protocol.Protocol, protocol.Token.Ticker, protocol.Token.Operation, protocol.Token.Amount, true, blob.TransactionHash)
+										_, err = db.Exec(updateSql, deploy.Protocol, deploy.Ticker, protocol.Token.Operation, protocol.Token.Amount, true, blob.TransactionHash)
 										if err != nil {
 											log.Printf("mint:: update blob transactions error: %v \n", err)
 											tx.Rollback()
@@ -628,8 +637,16 @@ func blob20Indexer() {
 										amount := decimal.NewFromFloat(0.00)
 										flag := false
 										for _, transfer := range protocol.Token.Transfers {
-											if !IsValidEthereumAddress(transfer.To) && !IsValidEthereumAddress(transfer.ToAddress) && transfer.Amount.GreaterThan(decimal.NewFromInt(0)) {
-												log.Printf("trasfer::address or amount verification failed：%s \n", blob.TransactionHash)
+											if transfer.To == "" && IsValidEthereumAddress(transfer.ToAddress) {
+												transfer.To = transfer.ToAddress
+											}
+											if !IsValidEthereumAddress(transfer.To) {
+												log.Printf("trasfer::address verification failed：to: %s, hash: %s \n", transfer.To, blob.TransactionHash)
+												flag = true
+												break
+											}
+											if transfer.Amount.LessThanOrEqual(decimal.NewFromInt(0)) {
+												log.Printf("trasfer::amount verification failed：amount: %s, hash: %s \n", transfer.Amount, blob.TransactionHash)
 												flag = true
 												break
 											}
@@ -734,6 +751,7 @@ func blob20Indexer() {
 									}
 								}
 							}
+						case "premine":
 						default:
 							log.Printf("operation:: Unrecognized operation type: %s, hash: %s \n", operation, blob.TransactionHash)
 						}
