@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blob20 Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        header {
+            background-color: #343a40;
+            color: white;
+            text-align: center;
+            padding: 1rem 0;
+        }
+        .container {
+            margin-top: 2rem;
+        }
+        .pagination {
+            justify-content: center;
+        }
+        .transaction-hash, .deployer {
+            cursor: pointer;
+            color: #007bff;
+        }
+        .highlight {
+            background-color: #e9ecef;
+            padding: 1rem;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        table {
+            width: 100%;
+        }
+        .input-group {
+            max-width: 100%;
+        }
+        .tab-pane {
+            margin-top: 1rem;
+        }
+        .status-success {
+            color: green;
+        }
+        .status-fail {
+            color: red;
+        }
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .loading.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Blob20 Explorer</h1>
+    </header>
+    <div class="loading" id="loading">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+    <div class="container">
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="accounts-tab" data-bs-toggle="tab" data-bs-target="#accounts" type="button" role="tab" aria-controls="accounts" aria-selected="true">Accounts</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tickers-tab" data-bs-toggle="tab" data-bs-target="#tickers" type="button" role="tab" aria-controls="tickers" aria-selected="false">Tickers</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="records-tab" data-bs-toggle="tab" data-bs-target="#records" type="button" role="tab" aria-controls="records" aria-selected="false">Records</button>
+            </li>
+        </ul>
+        <div class="tab-content" id="myTabContent">
+            <div class="tab-pane fade show active" id="accounts" role="tabpanel" aria-labelledby="accounts-tab">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h2>Accounts</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="accountAddress" placeholder="Address">
+                            <select class="form-control" id="accountTicker">
+                                <option value="BLOB">BLOB</option>
+                            </select>
+                            <button class="btn btn-primary" onclick="searchAccounts()">Search</button>
+                        </div>
+                        <div class="highlight">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Address</th>
+                                        <th>Protocol</th>
+                                        <th>Ticker</th>
+                                        <th>Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="accountsTableBody">
+                                    <!-- Data will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <nav>
+                            <ul class="pagination" id="accountsPagination">
+                                <li class="page-item"><button class="page-link" onclick="previousPage('accounts')" disabled>Prev</button></li>
+                                <li class="page-item disabled"><span class="page-link" id="accountsPageIndicator">1</span></li>
+                                <li class="page-item"><button class="page-link" onclick="nextPage('accounts')">Next</button></li>
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="tickers" role="tabpanel" aria-labelledby="tickers-tab">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h2>Tickers</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="tickerSearch" placeholder="Ticker">
+                            <button class="btn btn-success" onclick="searchTickers()">Search</button>
+                        </div>
+                        <div class="highlight">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Hash</th>
+                                        <th>Block</th>
+                                        <th>Timestamp</th>
+                                        <th>Deployer</th>
+                                        <th>Protocol</th>
+                                        <th>Ticker</th>
+                                        <th>Max Supply</th>
+                                        <th>Minted</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tickersTableBody">
+                                    <!-- Data will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="records" role="tabpanel" aria-labelledby="records-tab">
+                <div class="card">
+                    <div class="card-header bg-warning text-white">
+                        <h2>Records</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="recordFrom" placeholder="From Address">
+                            <input type="text" class="form-control" id="recordTo" placeholder="To Address">
+                            <input type="text" class="form-control" id="recordTx" placeholder="Hash">
+                            <button class="btn btn-warning" onclick="searchRecords()">Search</button>
+                        </div>
+                        <div class="highlight">
+                            <table class="table table-hover table-responsive">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Hash</th>
+                                        <th>Block</th>
+                                        <th>Timestamp</th>
+                                        <th>Ticker</th>
+                                        <th>Operation</th>
+                                        <th>From</th>
+                                        <th>To</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recordsTableBody">
+                                    <!-- Data will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <nav>
+                            <ul class="pagination" id="recordsPagination">
+                                <li class="page-item"><button class="page-link" onclick="previousPage('records')" disabled>Prev</button></li>
+                                <li class="page-item disabled"><span class="page-link" id="recordsPageIndicator">1</span></li>
+                                <li class="page-item"><button class="page-link" onclick="nextPage('records')">Next</button></li>
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let accountsPage = 1;
+        let tickersPage = 1;
+        let recordsPage = 1;
+
+        document.addEventListener("DOMContentLoaded", function() {
+            fetchTickers();
+            fetchAccounts();
+            fetchRecords();
+        });
+
+        function showLoading() {
+            document.getElementById('loading').classList.add('show');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('show');
+        }
+
+        async function fetchAccounts() {
+            const address = document.getElementById('accountAddress').value;
+            const ticker = document.getElementById('accountTicker').value || 'BLOB';
+            let url = `https://blob20.art/api/getAccounts?page=${accountsPage}&pageSize=20`;
+            if (address) {
+                url += `&address=${address}`;
+            }
+            if (ticker) {
+                url += `&ticker=${ticker}`;
+            }
+            showLoading();
+            const response = await fetch(url);
+            const data = await response.json();
+            hideLoading();
+            const tableBody = document.getElementById('accountsTableBody');
+            tableBody.innerHTML = '';
+            data.forEach((account, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${(accountsPage - 1) * 20 + index + 1}</td>
+                    <td>${account.address}</td>
+                    <td>${account.protocol}</td>
+                    <td>${account.ticker}</td>
+                    <td>${account.balance}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            updatePagination('accounts', data.length);
+        }
+
+        async function fetchTickers() {
+            let url = `https://blob20.art/api/getTickers?page=${tickersPage}`;
+            showLoading();
+            const response = await fetch(url);
+            const data = await response.json();
+            hideLoading();
+            const tableBody = document.getElementById('tickersTableBody');
+            const tickerSelect = document.getElementById('accountTicker');
+            tableBody.innerHTML = '';
+            tickerSelect.innerHTML = '<option value="BLOB">BLOB</option>'; // Reset the ticker options
+            data.forEach((ticker, index) => {
+                const row = document.createElement('tr');
+                const displayTicker = ticker.Ticker.length > 8 ? ticker.Ticker.slice(0, 8) + '...' : ticker.Ticker;
+                const displayDeployer = ticker.Deployer.slice(0, 4) + '...' + ticker.Deployer.slice(-4);
+                row.innerHTML = `
+                    <td>${(tickersPage - 1) * 20 + index + 1}</td>
+                    <td class="transaction-hash" onclick="copyToClipboard('${ticker.TransactionHash}')">${ticker.TransactionHash.slice(0, 4)}...${ticker.TransactionHash.slice(-4)}</td>
+                    <td>${ticker.BlockNumber}</td>
+                    <td>${new Date(ticker.BlockTimestamp * 1000).toLocaleString()}</td>
+                    <td class="deployer" title="${ticker.Deployer}">${displayDeployer}</td>
+                    <td>${ticker.Protocol}</td>
+                    <td>${displayTicker}</td>
+                    <td>${ticker.MaxSupply}</td>
+                    <td>${ticker.MintAmount}</td>
+                `;
+                tableBody.appendChild(row);
+
+                // Add ticker to the select dropdown
+                const option = document.createElement('option');
+                option.value = ticker.Ticker;
+                option.text = ticker.Ticker;
+                tickerSelect.appendChild(option);
+            });
+        }
+
+        async function fetchRecords() {
+            const tx = document.getElementById('recordTx').value;
+            const from = document.getElementById('recordFrom').value;
+            const to = document.getElementById('recordTo').value;
+            let url = `https://blob20.art/api/getRecords?page=${recordsPage}&pageSize=20`;
+            const params = [];
+            if (tx) params.push(`tx=${tx}`);
+            if (from) params.push(`from=${from}`);
+            if (to) params.push(`to=${to}`);
+            if (params.length > 0) {
+                url += `&${params.join('&')}`;
+            }
+            showLoading();
+            const response = await fetch(url);
+            const data = await response.json();
+            hideLoading();
+            const tableBody = document.getElementById('recordsTableBody');
+            tableBody.innerHTML = '';
+            data.forEach((record, index) => {
+                const statusClass = record.status === 'success' ? 'status-success' : 'status-fail';
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${(recordsPage - 1) * 20 + index + 1}</td>
+                    <td class="transaction-hash" onclick="copyToClipboard('${record.transaction_hash}')">${record.transaction_hash.slice(0, 4)}...${record.transaction_hash.slice(-4)}</td>
+                    <td>${record.block_number}</td>
+                    <td>${new Date(record.block_timestamp * 1000).toLocaleString()}</td>
+                    <td>${record.ticker}</td>
+                    <td>${record.operation}</td>
+                    <td>${record.from}</td>
+                    <td>${record.to}</td>
+                    <td>${record.amount}</td>
+                    <td class="${statusClass}">${record.status}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            updatePagination('records', data.length);
+        }
+
+        function searchAccounts() {
+            accountsPage = 1;
+            fetchAccounts();
+        }
+
+        function searchTickers() {
+            tickersPage = 1;
+            fetchTickers();
+        }
+
+        function searchRecords() {
+            recordsPage = 1;
+            fetchRecords();
+        }
+
+        function updatePagination(type, dataLength) {
+            const previousButton = document.querySelector(`#${type}Pagination button[onclick="previousPage('${type}')"]`);
+            const nextButton = document.querySelector(`#${type}Pagination button[onclick="nextPage('${type}')"]`);
+            const pageIndicator = document.getElementById(`${type}PageIndicator`);
+            if (dataLength < 20) {
+                nextButton.disabled = true;
+            } else {
+                nextButton.disabled = false;
+            }
+            if (type === 'accounts' && accountsPage === 1) {
+                previousButton.disabled = true;
+            } else if (type === 'tickers' && tickersPage === 1) {
+                previousButton.disabled = true;
+            } else if (type === 'records' && recordsPage === 1) {
+                previousButton.disabled = true;
+            } else {
+                previousButton.disabled = false;
+            }
+            pageIndicator.textContent = `${type === 'accounts' ? accountsPage : type === 'tickers' ? tickersPage : recordsPage}`;
+        }
+
+        function previousPage(type) {
+            if (type === 'accounts' && accountsPage > 1) {
+                accountsPage--;
+                fetchAccounts();
+            } else if (type === 'tickers' && tickersPage > 1) {
+                tickersPage--;
+                fetchTickers();
+            } else if (type === 'records' && recordsPage > 1) {
+                recordsPage--;
+                fetchRecords();
+            }
+        }
+
+        function nextPage(type) {
+            if (type === 'accounts') {
+                accountsPage++;
+                fetchAccounts();
+            } else if (type === 'tickers') {
+                tickersPage++;
+                fetchTickers();
+            } else if (type === 'records') {
+                recordsPage++;
+                fetchRecords();
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Transaction Hash copied to clipboard');
+            });
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
